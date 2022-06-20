@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -80,10 +82,11 @@ class Gauge extends StatefulWidget {
   State<Gauge> createState() => _GaugeState();
 }
 
-class _GaugeState extends State<Gauge> with SingleTickerProviderStateMixin {
-  late ColorTween _displayModeTween;
+class _GaugeState extends State<Gauge> with TickerProviderStateMixin {
+  late ColorTween _driveModeTween;
   late Tween<double> _scaleTween;
-  late AnimationController _controller;
+  late AnimationController _driveModeController;
+  late AnimationController _scaleController;
 
   late GaugeState _state;
 
@@ -91,12 +94,16 @@ class _GaugeState extends State<Gauge> with SingleTickerProviderStateMixin {
   void initState() {
     super.initState();
     _state = context.read<GaugeCubit>().state;
-    _controller = AnimationController(
+    _driveModeController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
     );
+    _scaleController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 5),
+    );
     final theme = GaugeVisuals.fromState(_state);
-    _displayModeTween = ColorTween(
+    _driveModeTween = ColorTween(
       begin: theme.color,
       end: theme.color,
     );
@@ -108,7 +115,8 @@ class _GaugeState extends State<Gauge> with SingleTickerProviderStateMixin {
 
   @override
   void dispose() {
-    _controller.dispose();
+    _driveModeController.dispose();
+    _scaleController.dispose();
     super.dispose();
   }
 
@@ -118,32 +126,37 @@ class _GaugeState extends State<Gauge> with SingleTickerProviderStateMixin {
     return BlocListener<GaugeCubit, GaugeState>(
       listener: (context, state) {
         final theme = GaugeVisuals.fromState(state);
-        _displayModeTween = ColorTween(
-          begin: _displayModeTween.evaluate(_controller),
+        _driveModeTween = ColorTween(
+          begin: _driveModeTween.evaluate(_driveModeController),
           end: theme.color,
         );
         _scaleTween = Tween<double>(
-          begin: _scaleTween.evaluate(_controller),
+          begin: _scaleTween.evaluate(_scaleController),
           end: theme.diameter,
         );
         _state = state;
-        _controller.forward(from: 0);
+        _driveModeController.forward(from: 0);
+        _scaleController.forward(from: 0);
       },
       child: Stack(
         alignment: Alignment.center,
         children: [
           AnimatedBuilder(
-            animation: _controller,
+            animation: _scaleController,
             builder: (context, child) {
-              final diameter = _scaleTween.evaluate(_controller);
-              final color = _displayModeTween.evaluate(_controller);
-              return Container(
-                width: diameter,
-                height: diameter,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color,
-                ),
+              return AnimatedBuilder(
+                animation: _driveModeController,
+                builder: (context, child) {
+                  final diameter = _scaleTween.evaluate(_scaleController);
+                  final color = _driveModeTween.evaluate(_driveModeController);
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      _OuterCircle(diameter: diameter, color: color),
+                      _InnerCircle(diameter: diameter, color: color),
+                    ],
+                  );
+                },
               );
             },
           ),
@@ -159,6 +172,54 @@ class _GaugeState extends State<Gauge> with SingleTickerProviderStateMixin {
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _OuterCircle extends StatelessWidget {
+  const _OuterCircle({
+    Key? key,
+    required this.diameter,
+    required this.color,
+  }) : super(key: key);
+
+  final double diameter;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: diameter,
+      height: diameter,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color != null
+            ? color!.withAlpha(max(0, color!.alpha - 100))
+            : color,
+      ),
+    );
+  }
+}
+
+class _InnerCircle extends StatelessWidget {
+  const _InnerCircle({
+    Key? key,
+    required this.diameter,
+    required this.color,
+  }) : super(key: key);
+
+  final double diameter;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: diameter / 2,
+      height: diameter / 2,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
       ),
     );
   }
